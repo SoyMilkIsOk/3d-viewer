@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src blob: data: 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="Referrer-Policy" content="no-referrer">
+
+  <!-- SEO -->
+  <title>3D Viewer — The Simplest &amp; Most Beautiful Free 3D Model Viewer on the Web</title>
+  <meta name="description"
+    content="The simplest and most beautiful free 3D model viewer on the web. Upload STL, OBJ, or PLY files and view them in stunning 3D — right in your browser, no sign-up required.">
+  <meta name="keywords"
+    content="3D viewer, STL viewer, OBJ viewer, PLY viewer, free 3D model viewer, browser 3D, WebGL viewer">
+  <link rel="canonical" href="https://yourdomain.com/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="3D Viewer — The Simplest & Most Beautiful Free 3D Viewer">
+  <meta property="og:description"
+    content="Upload any 3D model and view it beautifully in your browser. STL, OBJ, PLY supported. No sign-up, no downloads, totally free.">
+  <meta property="og:url" content="https://yourdomain.com/">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="3D Viewer — Free, Beautiful, Browser-Based">
+  <meta name="twitter:description"
+    content="The simplest and most beautiful free 3D model viewer on the web. Drop a file and go.">
+
+  <style>
+    *,
+    *::before,
+    *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box
+    }
+
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #14141f;
+      --surface2: #1e1e2e;
+      --border: #2a2a3e;
+      --text: #e0e0f0;
+      --text-dim: #8888aa;
+      --accent: #6c63ff;
+      --accent2: #ff6cf0;
+      --glow: rgba(108, 99, 255, .35);
+    }
+
+    html,
+    body {
+      height: 100%;
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden
+    }
+
+    /* ── layout ── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, var(--surface), var(--surface2));
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+      transition: transform .35s cubic-bezier(.4, 0, .2, 1), opacity .35s;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    header.hidden {
+      transform: translateY(-100%);
+      opacity: 0;
+      pointer-events: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: .5px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      white-space: nowrap;
+    }
+
+    /* ── controls ── */
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap
+    }
+
+    .btn {
+      position: relative;
+      cursor: pointer;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: .78rem;
+      font-weight: 500;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      transition: transform .2s, box-shadow .2s;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px var(--glow)
+    }
+
+    .btn:active {
+      transform: scale(.97)
+    }
+
+    .btn.outline {
+      background: transparent;
+      border: 1.5px solid var(--border);
+      color: var(--text-dim);
+    }
+
+    .btn.outline:hover {
+      border-color: var(--accent);
+      color: var(--text)
+    }
+
+    .btn.outline.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px var(--glow)
+    }
+
+    #fileInput,
+    #bgInput,
+    #bgColorInput {
+      display: none
+    }
+
+    .info {
+      font-size: .72rem;
+      color: var(--text-dim);
+      margin-left: 2px;
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    /* ── canvas area ── */
+    .viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg)
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab
+    }
+
+    canvas:active {
+      cursor: grabbing
+    }
+
+    /* ── drop zone overlay ── */
+    .dropzone {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .3s;
+      background: rgba(10, 10, 15, .85);
+      z-index: 5;
+    }
+
+    .dropzone.visible {
+      opacity: 1;
+      pointer-events: all
+    }
+
+    .dropzone.drag-over {
+      background: rgba(108, 99, 255, .12)
+    }
+
+    .dropzone-ring {
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      border: 2.5px dashed var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: border-color .3s, box-shadow .3s;
+      margin-bottom: 20px;
+    }
+
+    .drag-over .dropzone-ring {
+      border-color: var(--accent);
+      box-shadow: 0 0 40px var(--glow)
+    }
+
+    .dropzone-ring svg {
+      width: 48px;
+      height: 48px;
+      fill: none;
+      stroke: var(--text-dim);
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round
+    }
+
+    .dropzone h2 {
+      font-size: 1.15rem;
+      font-weight: 500;
+      margin-bottom: 6px
+    }
+
+    .dropzone p {
+      color: var(--text-dim);
+      font-size: .82rem
+    }
+
+    /* ── stats bar ── */
+    .stats {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 18px;
+      padding: 8px 20px;
+      border-radius: 12px;
+      background: rgba(20, 20, 31, .8);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      font-size: .72rem;
+      color: var(--text-dim);
+      opacity: 0;
+      transition: opacity .4s;
+      z-index: 4;
+    }
+
+    .stats.visible {
+      opacity: 1
+    }
+
+    .stats span strong {
+      color: var(--text);
+      font-weight: 500
+    }
+
+    /* ── color picker ── */
+    .color-picker-wrap {
+      position: relative;
+      display: inline-block
+    }
+
+    .color-swatch {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: 2px solid var(--border);
+      cursor: pointer;
+      transition: border-color .2s
+    }
+
+    .color-swatch:hover {
+      border-color: var(--accent)
+    }
+
+    .color-picker-wrap input[type=color] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer
+    }
+
+    /* ── slider ── */
+    .slider-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px
+    }
+
+    .slider-wrap label {
+      font-size: .72rem;
+      color: var(--text-dim);
+      white-space: nowrap
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 70px;
+      height: 4px;
+      border-radius: 4px;
+      background: var(--border);
+      outline: none
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 6px var(--glow)
+    }
+
+    /* ── loading ── */
+    .loader {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 10, 15, .7);
+      z-index: 6;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .3s
+    }
+
+    .loader.visible {
+      opacity: 1;
+      pointer-events: all
+    }
+
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .8s linear infinite
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    /* ── tooltip ── */
+    .key-tooltip {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 22px;
+      border-radius: 12px;
+      background: rgba(20, 20, 31, .88);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      font-size: .78rem;
+      color: var(--text);
+      z-index: 20;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .35s;
+      white-space: nowrap;
+    }
+
+    .key-tooltip.visible {
+      opacity: 1
+    }
+
+    .key-tooltip kbd {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 5px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      font-family: inherit;
+      font-size: .72rem;
+      font-weight: 600;
+      margin: 0 2px;
+      color: var(--accent);
+    }
+
+    /* ── settings panel ── */
+    .settings-panel {
+      position: absolute;
+      top: 60px;
+      right: 16px;
+      width: 260px;
+      padding: 18px;
+      border-radius: 14px;
+      background: rgba(20, 20, 31, .92);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      z-index: 15;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-8px);
+      transition: opacity .25s, transform .25s;
+    }
+
+    .settings-panel.visible {
+      opacity: 1;
+      pointer-events: all;
+      transform: translateY(0)
+    }
+
+    .settings-panel h3 {
+      font-size: .82rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text)
+    }
+
+    .setting-group {
+      margin-bottom: 14px
+    }
+
+    .setting-group:last-child {
+      margin-bottom: 0
+    }
+
+    .setting-label {
+      font-size: .7rem;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      font-weight: 500
+    }
+
+    .setting-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap
+    }
+
+    .setting-chip {
+      padding: 5px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      font-family: inherit;
+      font-size: .7rem;
+      cursor: pointer;
+      transition: all .2s;
+      white-space: nowrap;
+    }
+
+    .setting-chip:hover {
+      border-color: var(--accent);
+      color: var(--text)
+    }
+
+    .setting-chip.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(108, 99, 255, .1)
+    }
+
+    .setting-chip.upload-chip {
+      border-style: dashed
+    }
+
+    /* ── bg image ── */
+    .viewport-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background-size: cover;
+      background-position: center;
+      opacity: 0;
+      transition: opacity .5s;
+      pointer-events: none;
+    }
+
+    .viewport-bg.visible {
+      opacity: 1
+    }
+
+    canvas {
+      position: relative;
+      z-index: 1;
+      background: transparent;
+    }
+
+    /* ── ground reflection ── */
+    .ground-line {
+      position: absolute;
+      bottom: 25%;
+      left: 10%;
+      right: 10%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(108, 99, 255, .15), transparent);
+      z-index: 2;
+      opacity: 0;
+      transition: opacity .4s;
+      pointer-events: none;
+    }
+
+    .ground-line.visible {
+      opacity: 1
+    }
+
+    /* ── floating toggle button ── */
+    .toggle-ui-btn {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      z-index: 20;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      background: rgba(20, 20, 31, .85);
+      backdrop-filter: blur(12px);
+      color: var(--text-dim);
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity .4s, border-color .2s, color .2s, box-shadow .2s;
+      line-height: 1;
+    }
+
+    .toggle-ui-btn:hover {
+      border-color: var(--accent);
+      color: var(--text);
+      box-shadow: 0 0 14px var(--glow);
+    }
+
+    .toggle-ui-btn.ui-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .toggle-ui-btn.ui-hidden.peek {
+      opacity: 1;
+      pointer-events: all;
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* ── bg color picker (settings) ── */
+    .bg-color-wrap {
+      position: relative;
+      display: inline-block;
+    }
+
+    .bg-color-swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      border: 1.5px dashed var(--border);
+      cursor: pointer;
+      vertical-align: middle;
+      transition: border-color .2s;
+    }
+
+    .bg-color-swatch:hover {
+      border-color: var(--accent);
+    }
+
+    .bg-color-wrap input[type=color] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+
+    /* ── mobile responsiveness ── */
+    @media (max-width: 640px) {
+      header {
+        padding: 10px 14px;
+        gap: 6px;
+      }
+
+      header h1 {
+        font-size: .9rem;
+        width: 100%;
+        text-align: center;
+        margin-bottom: 2px;
+      }
+
+      .controls {
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+      }
+
+      .btn {
+        padding: 6px 10px;
+        font-size: .68rem;
+        border-radius: 8px;
+      }
+
+      .slider-wrap {
+        gap: 4px;
+      }
+
+      .slider-wrap label {
+        font-size: .65rem;
+      }
+
+      input[type=range] {
+        width: 50px;
+      }
+
+      .color-swatch {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+      }
+
+      .info {
+        font-size: .65rem;
+        max-width: 80px;
+      }
+
+      .settings-panel {
+        top: auto;
+        bottom: 70px;
+        right: 10px;
+        left: 10px;
+        width: auto;
+        max-height: 60vh;
+        overflow-y: auto;
+      }
+
+      .key-tooltip {
+        font-size: .7rem;
+        padding: 8px 16px;
+      }
+
+      .stats {
+        padding: 6px 14px;
+        gap: 10px;
+        font-size: .65rem;
+      }
+
+      .dropzone-ring {
+        width: 120px;
+        height: 120px;
+      }
+
+      .dropzone-ring svg {
+        width: 36px;
+        height: 36px;
+      }
+
+      .dropzone h2 {
+        font-size: 1rem;
+      }
+
+      .dropzone p {
+        font-size: .72rem;
+      }
+
+      .toggle-ui-btn {
+        bottom: 14px;
+        right: 14px;
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <header id="header">
+      <h1>⬡ 3D Viewer</h1>
+      <div class="controls">
+        <button class="btn" onclick="document.getElementById('fileInput').click()">↑ Upload Model</button>
+        <input type="file" id="fileInput" accept=".stl,.obj,.ply">
+
+        <button class="btn outline" id="btnSpin" onclick="toggleSpin()">⟳ Auto-Spin</button>
+        <button class="btn outline" id="btnWireframe" onclick="toggleWireframe()">◇ Wireframe</button>
+
+        <div class="slider-wrap">
+          <label>Speed</label>
+          <input type="range" id="speedSlider" min="0" max="200" value="50">
+        </div>
+
+        <div class="color-picker-wrap" title="Model color">
+          <div class="color-swatch" id="colorSwatch" style="background:#6c63ff"></div>
+          <input type="color" id="colorPicker" value="#6c63ff">
+        </div>
+
+        <button class="btn outline" id="btnSettings" onclick="toggleSettings()">⚙ Settings</button>
+
+        <span class="info" id="fileName"></span>
+      </div>
+    </header>
+
+    <main class="viewport" id="viewport">
+      <div class="viewport-bg" id="viewportBg"></div>
+      <canvas id="glcanvas"></canvas>
+      <div class="ground-line" id="groundLine"></div>
+
+      <div class="dropzone visible" id="dropzone">
+        <div class="dropzone-ring">
+          <svg viewBox="0 0 64 64">
+            <path d="M32 4v40M18 30l14 14 14-14" />
+            <path d="M8 44v12a4 4 0 004 4h40a4 4 0 004-4V44" />
+          </svg>
+        </div>
+        <h2>Drop a 3D model here</h2>
+        <p>Supports STL · OBJ · PLY</p>
+      </div>
+
+      <div class="stats" id="stats">
+        <span>Vertices: <strong id="statVerts">0</strong></span>
+        <span>Faces: <strong id="statFaces">0</strong></span>
+        <span>Format: <strong id="statFmt">—</strong></span>
+      </div>
+
+      <div class="loader" id="loader">
+        <div class="spinner"></div>
+      </div>
+
+      <div class="key-tooltip" id="keyTooltip">Press <kbd>I</kbd> to toggle controls</div>
+
+      <!-- Settings Panel -->
+      <section class="settings-panel" id="settingsPanel">
+        <h3>⚙ Settings</h3>
+
+        <div class="setting-group">
+          <div class="setting-label">Lighting</div>
+          <div class="setting-row" id="lightPresets">
+            <button class="setting-chip active" data-light="studio">Studio</button>
+            <button class="setting-chip" data-light="sunset">Sunset</button>
+            <button class="setting-chip" data-light="neon">Neon</button>
+            <button class="setting-chip" data-light="cool">Cool</button>
+            <button class="setting-chip" data-light="dramatic">Dramatic</button>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-label">Background</div>
+          <div class="setting-row" id="bgPresets">
+            <button class="setting-chip active" data-bg="void">Void</button>
+            <button class="setting-chip" data-bg="charcoal">Charcoal</button>
+            <button class="setting-chip" data-bg="midnight">Midnight</button>
+            <button class="setting-chip" data-bg="purple">Purple</button>
+            <button class="setting-chip" data-bg="grid">Grid</button>
+            <button class="setting-chip upload-chip" onclick="document.getElementById('bgInput').click()">+
+              Image</button>
+            <div class="bg-color-wrap">
+              <button class="setting-chip upload-chip" id="bgColorChip">🎨 Color</button>
+              <input type="color" id="bgColorInput" value="#1a1a2e">
+            </div>
+          </div>
+          <input type="file" id="bgInput" accept="image/*">
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-label">Extras</div>
+          <div class="setting-row">
+            <button class="setting-chip" id="btnGround" onclick="toggleGround()">Ground Line</button>
+            <button class="setting-chip" id="btnAutoCenter" onclick="resetView()">Reset View</button>
+          </div>
+        </div>
+      </section>
+      <!-- Floating UI toggle button -->
+      <button class="toggle-ui-btn" id="toggleUiBtn" onclick="toggleUI()" title="Toggle interface (I)">👁</button>
+    </main>
+  </div>
+
+  <script>
+    /* ═══════════════════════════════════════════════════
+       3D VIEWER  —  Raw WebGL, No Libraries
+       ═══════════════════════════════════════════════════ */
+
+    // ── constants ──
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+    const ALLOWED_EXTENSIONS = new Set(['stl', 'obj', 'ply']);
+    const MAX_BG_SIZE = 5 * 1024 * 1024; // 5 MB
+
+    // ── state ──
+    let gl, program, wireframeProgram;
+    let vertexBuffer, normalBuffer, indexBuffer, wireIndexBuffer;
+    let indexCount = 0, vertCount = 0, faceCount = 0;
+    let autoSpin = true, wireMode = 0; // 0=solid, 1=wireframe, 2=see-through
+    let rotX = -0.4, rotY = 0;
+    let zoom = 3.5;
+    let isDragging = false, lastMX = 0, lastMY = 0;
+    let modelColor = [0.424, 0.388, 1.0];
+    let spinSpeed = 0.5;
+    let hasModel = false;
+    let modelCenter = [0, 0, 0], modelScale = 1;
+    let wireIndexCount = 0;
+    let uiVisible = true;
+    let bgObjectUrl = null;
+    let showGround = false;
+    let tooltipTimer = null;
+    let customBgColor = null; // for custom bg color mode
+
+    // Lighting presets: { key1Dir, key1Color, fill1Dir, fill1Color, ambient, rimColor }
+    const LIGHT_PRESETS = {
+      studio: { l1: [2, 4, 3], l1c: [1, .98, .95], l2: [-3, 1, -2], l2c: [.6, .65, .8], amb: .08, rim: [.6, .5, 1] },
+      sunset: { l1: [3, 2, 1], l1c: [1, .6, .25], l2: [-2, 3, -1], l2c: [.3, .2, .5], amb: .06, rim: [1, .4, .2] },
+      neon: { l1: [0, 3, 3], l1c: [.2, .9, 1], l2: [-3, 0, 0], l2c: [1, .2, .8], amb: .04, rim: [.3, 1, .6] },
+      cool: { l1: [1, 4, 2], l1c: [.7, .85, 1], l2: [-2, 2, -3], l2c: [.5, .6, .9], amb: .1, rim: [.4, .6, 1] },
+      dramatic: { l1: [4, 1, 0], l1c: [1, .9, .7], l2: [-1, -1, -3], l2c: [.1, .1, .2], amb: .02, rim: [1, .3, .1] },
+    };
+    let currentLight = LIGHT_PRESETS.studio;
+
+    // Background presets
+    const BG_PRESETS = {
+      void: { clear: [.039, .039, .059], css: '' },
+      charcoal: { clear: [.12, .12, .13], css: '' },
+      midnight: { clear: [.04, .06, .14], css: '' },
+      purple: { clear: [.08, .04, .12], css: '' },
+      grid: { clear: [.051, .051, .078], css: 'repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(108,99,255,.25) 39px,rgba(108,99,255,.25) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(108,99,255,.25) 39px,rgba(108,99,255,.25) 40px)', cssBg: '#0d0d14' },
+    };
+    let currentBg = BG_PRESETS.void;
+
+    // ── init ──
+    const canvas = document.getElementById('glcanvas');
+    gl = canvas.getContext('webgl', { antialias: true, alpha: true, premultipliedAlpha: false });
+    if (!gl) { document.body.textContent = 'WebGL is not supported in your browser.'; }
+    gl.getExtension('OES_element_index_uint');
+
+    resize();
+    window.addEventListener('resize', resize);
+
+    function resize() {
+      const vp = document.getElementById('viewport');
+      canvas.width = vp.clientWidth * devicePixelRatio;
+      canvas.height = vp.clientHeight * devicePixelRatio;
+      if (gl) gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+
+    /* ── shaders ── */
+    const VERT_SRC = `
+  attribute vec3 aPos;
+  attribute vec3 aNorm;
+  uniform mat4 uProj, uView, uModel;
+  uniform mat3 uNormalMat;
+  varying vec3 vNorm, vPos;
+  void main(){
+    vec4 wp = uModel * vec4(aPos,1.0);
+    vPos = wp.xyz;
+    vNorm = normalize(uNormalMat * aNorm);
+    gl_Position = uProj * uView * wp;
+  }
+`;
+    const FRAG_SRC = `
+  precision mediump float;
+  varying vec3 vNorm, vPos;
+  uniform vec3 uColor, uEye;
+  uniform float uTime;
+  uniform vec3 uL1Dir, uL1Col, uL2Dir, uL2Col, uRimCol;
+  uniform float uAmb;
+  void main(){
+    vec3 N = normalize(vNorm);
+    vec3 L1 = normalize(uL1Dir);
+    float diff1 = max(dot(N,L1),0.0);
+    vec3 L2 = normalize(uL2Dir);
+    float diff2 = max(dot(N,L2),0.0) * 0.35;
+    vec3 V = normalize(uEye - vPos);
+    float rim = pow(1.0 - max(dot(N,V),0.0), 3.0) * 0.4;
+    vec3 H = normalize(L1 + V);
+    float spec = pow(max(dot(N,H),0.0), 64.0) * 0.6;
+    vec3 col = uColor * (uAmb + diff1 * 0.7 * uL1Col + diff2 * uL2Col) + vec3(1.0)*spec + uRimCol*rim;
+    float iri = dot(N,V);
+    col += vec3(0.05,0.02,0.08) * sin(iri*6.2832 + uTime*0.5);
+    col = col / (col + vec3(1.0));
+    col = pow(col, vec3(1.0/2.2));
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+    const WIRE_FRAG_SRC = `
+  precision mediump float;
+  uniform vec3 uColor;
+  void main(){ gl_FragColor = vec4(uColor*0.7+vec3(0.3), 1.0); }
+`;
+
+    function createShader(type, src) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.error(gl.getShaderInfoLog(s)); gl.deleteShader(s); return null; }
+      return s;
+    }
+    function createProgram(vs, fs) {
+      const p = gl.createProgram();
+      gl.attachShader(p, vs); gl.attachShader(p, fs);
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { console.error(gl.getProgramInfoLog(p)); return null; }
+      return p;
+    }
+
+    const vs = createShader(gl.VERTEX_SHADER, VERT_SRC);
+    program = createProgram(vs, createShader(gl.FRAGMENT_SHADER, FRAG_SRC));
+    wireframeProgram = createProgram(createShader(gl.VERTEX_SHADER, VERT_SRC), createShader(gl.FRAGMENT_SHADER, WIRE_FRAG_SRC));
+
+    vertexBuffer = gl.createBuffer();
+    normalBuffer = gl.createBuffer();
+    indexBuffer = gl.createBuffer();
+    wireIndexBuffer = gl.createBuffer();
+
+    /* ── matrix helpers ── */
+    function perspective(fov, asp, n, f) { const t = 1 / Math.tan(fov / 2), nf = 1 / (n - f); return new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) * nf, -1, 0, 0, 2 * f * n * nf, 0]) }
+    function lookAt(e, c, u) { let zx = e[0] - c[0], zy = e[1] - c[1], zz = e[2] - c[2], l = Math.hypot(zx, zy, zz); zx /= l; zy /= l; zz /= l; let xx = u[1] * zz - u[2] * zy, xy = u[2] * zx - u[0] * zz, xz = u[0] * zy - u[1] * zx; l = Math.hypot(xx, xy, xz); xx /= l; xy /= l; xz /= l; let yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx; return new Float32Array([xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0, -(xx * e[0] + xy * e[1] + xz * e[2]), -(yx * e[0] + yy * e[1] + yz * e[2]), -(zx * e[0] + zy * e[1] + zz * e[2]), 1]) }
+    function m4Mul(a, b) { const r = new Float32Array(16); for (let i = 0; i < 4; i++)for (let j = 0; j < 4; j++) { r[j * 4 + i] = 0; for (let k = 0; k < 4; k++)r[j * 4 + i] += a[k * 4 + i] * b[j * 4 + k] } return r }
+    function m4RotX(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1]) }
+    function m4RotY(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]) }
+    function m4Trans(x, y, z) { return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]) }
+    function m4Scale(s) { return new Float32Array([s, 0, 0, 0, 0, s, 0, 0, 0, 0, s, 0, 0, 0, 0, 1]) }
+    function m3Normal(m) { const a00 = m[0], a01 = m[1], a02 = m[2], a10 = m[4], a11 = m[5], a12 = m[6], a20 = m[8], a21 = m[9], a22 = m[10]; const d = a00 * (a11 * a22 - a12 * a21) - a01 * (a10 * a22 - a12 * a20) + a02 * (a10 * a21 - a11 * a20); const id = 1 / d; return new Float32Array([(a11 * a22 - a12 * a21) * id, (a02 * a21 - a01 * a22) * id, (a01 * a12 - a02 * a11) * id, (a12 * a20 - a10 * a22) * id, (a00 * a22 - a02 * a20) * id, (a02 * a10 - a00 * a12) * id, (a10 * a21 - a11 * a20) * id, (a01 * a20 - a00 * a21) * id, (a00 * a11 - a01 * a10) * id]) }
+
+    /* ── parsers ── */
+    function parseSTLBinary(buf) {
+      const dv = new DataView(buf);
+      const n = dv.getUint32(80, true);
+      const verts = new Float32Array(n * 9), norms = new Float32Array(n * 9), idx = new Uint32Array(n * 3);
+      let off = 84;
+      for (let i = 0; i < n; i++) {
+        const nx = dv.getFloat32(off, true), ny = dv.getFloat32(off + 4, true), nz = dv.getFloat32(off + 8, true); off += 12;
+        for (let j = 0; j < 3; j++) { const vi = i * 3 + j; verts[vi * 3] = dv.getFloat32(off, true); verts[vi * 3 + 1] = dv.getFloat32(off + 4, true); verts[vi * 3 + 2] = dv.getFloat32(off + 8, true); off += 12; norms[vi * 3] = nx; norms[vi * 3 + 1] = ny; norms[vi * 3 + 2] = nz; idx[vi] = vi }
+        off += 2;
+      }
+      return { vertices: verts, normals: norms, indices: idx, format: 'STL' };
+    }
+
+    function parseSTLAscii(text) {
+      const verts = [], norms = [], idx = []; const lines = text.split('\n'); let cn = [0, 0, 1], vi = 0;
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (line.startsWith('facet normal')) { const p = line.split(/\s+/); cn = [parseFloat(p[2]), parseFloat(p[3]), parseFloat(p[4])] }
+        else if (line.startsWith('vertex')) { const p = line.split(/\s+/); verts.push(parseFloat(p[1]), parseFloat(p[2]), parseFloat(p[3])); norms.push(cn[0], cn[1], cn[2]); idx.push(vi++) }
+      }
+      return { vertices: new Float32Array(verts), normals: new Float32Array(norms), indices: new Uint32Array(idx), format: 'STL' };
+    }
+
+    function parseOBJ(text) {
+      const pos = [], objN = []; const oV = [], oN = [], oI = []; let vi = 0;
+      for (const raw of text.split('\n')) {
+        const l = raw.trim();
+        if (l.startsWith('v ')) { const p = l.split(/\s+/); pos.push([parseFloat(p[1]), parseFloat(p[2]), parseFloat(p[3])]) }
+        else if (l.startsWith('vn ')) { const p = l.split(/\s+/); objN.push([parseFloat(p[1]), parseFloat(p[2]), parseFloat(p[3])]) }
+        else if (l.startsWith('f ')) {
+          const p = l.split(/\s+/).slice(1); const fv = [];
+          for (const tk of p) {
+            const pts = tk.split('/'); const pi = parseInt(pts[0]) - 1; const ni = pts[2] ? parseInt(pts[2]) - 1 : -1;
+            const ps = pos[pi] || [0, 0, 0]; oV.push(ps[0], ps[1], ps[2]);
+            if (ni >= 0 && objN[ni]) oN.push(objN[ni][0], objN[ni][1], objN[ni][2]); else oN.push(0, 0, 0); fv.push(vi++)
+          }
+          for (let i = 1; i < fv.length - 1; i++)oI.push(fv[0], fv[i], fv[i + 1])
+        }
+      }
+      const vertices = new Float32Array(oV), normals = new Float32Array(oN), indices = new Uint32Array(oI);
+      let need = false; for (let i = 0; i < normals.length; i += 3)if (normals[i] === 0 && normals[i + 1] === 0 && normals[i + 2] === 0) { need = true; break }
+      if (need) computeNormals(vertices, normals, indices);
+      return { vertices, normals, indices, format: 'OBJ' };
+    }
+
+    function parsePLY(text) {
+      const lines = text.split('\n'); let vc = 0, fc = 0, li = 0, props = [];
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i].trim();
+        if (l === 'end_header') { li = i + 1; break }
+        if (l.startsWith('element vertex')) vc = parseInt(l.split(/\s+/)[2]);
+        if (l.startsWith('element face')) fc = parseInt(l.split(/\s+/)[2]);
+        if (l.startsWith('property') && vc > 0 && fc === 0) props.push(l.split(/\s+/).pop())
+      }
+      const xi = props.indexOf('x'), yi = props.indexOf('y'), zi = props.indexOf('z');
+      const nxi = props.indexOf('nx'), nyi = props.indexOf('ny'), nzi = props.indexOf('nz');
+      const hasN = nxi >= 0 && nyi >= 0 && nzi >= 0;
+      const positions = [], normals = [];
+      for (let i = 0; i < vc; i++) { const p = lines[li + i].trim().split(/\s+/).map(Number); positions.push(p[xi], p[yi], p[zi]); if (hasN) normals.push(p[nxi], p[nyi], p[nzi]); else normals.push(0, 0, 0) }
+      const oI = []; const fs = li + vc;
+      for (let i = 0; i < fc; i++) { const p = lines[fs + i].trim().split(/\s+/).map(Number); const n = p[0]; for (let j = 1; j < n - 1; j++)oI.push(p[1], p[1 + j], p[2 + j]) }
+      const verts = new Float32Array(positions), norms = new Float32Array(normals), indices = new Uint32Array(oI);
+      if (!hasN) computeNormals(verts, norms, indices);
+      return { vertices: verts, normals: norms, indices, format: 'PLY' };
+    }
+
+    function computeNormals(v, n, idx) {
+      n.fill(0);
+      for (let i = 0; i < idx.length; i += 3) {
+        const a = idx[i] * 3, b = idx[i + 1] * 3, c = idx[i + 2] * 3;
+        const bx = v[b] - v[a], by = v[b + 1] - v[a + 1], bz = v[b + 2] - v[a + 2];
+        const cx = v[c] - v[a], cy = v[c + 1] - v[a + 1], cz = v[c + 2] - v[a + 2];
+        const nx = by * cz - bz * cy, ny = bz * cx - bx * cz, nz = bx * cy - by * cx;
+        n[a] += nx; n[a + 1] += ny; n[a + 2] += nz; n[b] += nx; n[b + 1] += ny; n[b + 2] += nz; n[c] += nx; n[c + 1] += ny; n[c + 2] += nz
+      }
+      for (let i = 0; i < n.length; i += 3) { const l = Math.hypot(n[i], n[i + 1], n[i + 2]) || 1; n[i] /= l; n[i + 1] /= l; n[i + 2] /= l }
+    }
+
+    function generateWireframeIndices(idx) {
+      const s = new Set(), w = [];
+      for (let i = 0; i < idx.length; i += 3) {
+        const a = idx[i], b = idx[i + 1], c = idx[i + 2];
+        for (const [e0, e1] of [[a, b], [b, c], [c, a]]) { const k = Math.min(e0, e1) + '_' + Math.max(e0, e1); if (!s.has(k)) { s.add(k); w.push(e0, e1) } }
+      }
+      return new Uint32Array(w);
+    }
+
+    /* ── load model ── */
+    function loadModel(data) {
+      const { vertices, normals, indices, format } = data;
+      let mnX = Infinity, mnY = Infinity, mnZ = Infinity, mxX = -Infinity, mxY = -Infinity, mxZ = -Infinity;
+      for (let i = 0; i < vertices.length; i += 3) { mnX = Math.min(mnX, vertices[i]); mxX = Math.max(mxX, vertices[i]); mnY = Math.min(mnY, vertices[i + 1]); mxY = Math.max(mxY, vertices[i + 1]); mnZ = Math.min(mnZ, vertices[i + 2]); mxZ = Math.max(mxZ, vertices[i + 2]) }
+      modelCenter = [(mnX + mxX) / 2, (mnY + mxY) / 2, (mnZ + mxZ) / 2];
+      modelScale = 2 / (Math.max(mxX - mnX, mxY - mnY, mxZ - mnZ) || 1);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer); gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer); gl.bufferData(gl.ARRAY_BUFFER, normals, gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+      indexCount = indices.length; vertCount = vertices.length / 3; faceCount = indices.length / 3;
+
+      const wi = generateWireframeIndices(indices);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wireIndexBuffer); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, wi, gl.STATIC_DRAW);
+      wireIndexCount = wi.length;
+
+      hasModel = true;
+      document.getElementById('statVerts').textContent = vertCount.toLocaleString();
+      document.getElementById('statFaces').textContent = faceCount.toLocaleString();
+      document.getElementById('statFmt').textContent = format;
+      document.getElementById('stats').classList.add('visible');
+      document.getElementById('dropzone').classList.remove('visible');
+      document.getElementById('loader').classList.remove('visible');
+      rotX = -0.4; rotY = 0; zoom = 3.5;
+    }
+
+    /* ── file validation & handling ── */
+    function validateFile(file) {
+      if (!file) return 'No file selected.';
+      if (file.size > MAX_FILE_SIZE) return 'File too large (max 50 MB).';
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (!ALLOWED_EXTENSIONS.has(ext)) return 'Unsupported format: .' + ext + '\nSupported: STL, OBJ, PLY';
+      return null;
+    }
+
+    function handleFile(file) {
+      const err = validateFile(file);
+      if (err) { showToast(err); document.getElementById('loader').classList.remove('visible'); return; }
+
+      document.getElementById('loader').classList.add('visible');
+      document.getElementById('fileName').textContent = file.name;
+      const ext = file.name.split('.').pop().toLowerCase();
+      const reader = new FileReader();
+      reader.onerror = () => { showToast('Failed to read file.'); document.getElementById('loader').classList.remove('visible'); };
+
+      if (ext === 'stl') {
+        reader.onload = e => {
+          try {
+            const buf = e.target.result;
+            let ascii = false;
+            try {
+              const h = new TextDecoder().decode(new Uint8Array(buf, 0, 80));
+              if (h.startsWith('solid') && !h.includes('\0')) { const t = new TextDecoder().decode(buf); if (t.includes('facet') && t.includes('vertex')) ascii = true }
+            } catch (x) { }
+            loadModel(ascii ? parseSTLAscii(new TextDecoder().decode(buf)) : parseSTLBinary(buf));
+          } catch (x) { showToast('Error parsing STL file.'); document.getElementById('loader').classList.remove('visible'); }
+        };
+        reader.readAsArrayBuffer(file);
+      } else if (ext === 'obj') {
+        reader.onload = e => { try { loadModel(parseOBJ(e.target.result)); } catch (x) { showToast('Error parsing OBJ file.'); document.getElementById('loader').classList.remove('visible'); } };
+        reader.readAsText(file);
+      } else if (ext === 'ply') {
+        reader.onload = e => { try { loadModel(parsePLY(e.target.result)); } catch (x) { showToast('Error parsing PLY file.'); document.getElementById('loader').classList.remove('visible'); } };
+        reader.readAsText(file);
+      }
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('keyTooltip');
+      t.textContent = msg;
+      t.classList.add('visible');
+      clearTimeout(tooltipTimer);
+      tooltipTimer = setTimeout(() => { t.classList.remove('visible'); resetTooltipText(); }, 3000);
+    }
+
+    function resetTooltipText() {
+      const t = document.getElementById('keyTooltip');
+      t.innerHTML = 'Press <kbd>I</kbd> to toggle controls';
+    }
+
+    document.getElementById('fileInput').addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = ''; });
+
+    // Drag & drop
+    const dropzoneEl = document.getElementById('dropzone');
+    const viewportEl = document.getElementById('viewport');
+    ['dragenter', 'dragover'].forEach(ev => viewportEl.addEventListener(ev, e => { e.preventDefault(); dropzoneEl.classList.add('visible', 'drag-over'); }));
+    ['dragleave', 'drop'].forEach(ev => viewportEl.addEventListener(ev, e => { e.preventDefault(); dropzoneEl.classList.remove('drag-over'); if (!hasModel) dropzoneEl.classList.add('visible'); }));
+    viewportEl.addEventListener('drop', e => { if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+
+    /* ── mouse / touch ── */
+    canvas.addEventListener('mousedown', e => { isDragging = true; lastMX = e.clientX; lastMY = e.clientY; });
+    window.addEventListener('mouseup', () => isDragging = false);
+    window.addEventListener('mousemove', e => {
+      if (!isDragging) return;
+      rotY += (e.clientX - lastMX) * 0.008; rotX += (e.clientY - lastMY) * 0.008;
+
+      lastMX = e.clientX; lastMY = e.clientY;
+    });
+    canvas.addEventListener('wheel', e => { e.preventDefault(); zoom *= 1 + e.deltaY * 0.001; zoom = Math.max(1, Math.min(20, zoom)); }, { passive: false });
+
+    let lastTouchDist = 0;
+    canvas.addEventListener('touchstart', e => {
+      if (e.touches.length === 1) { isDragging = true; lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY }
+      else if (e.touches.length === 2) lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    }, { passive: true });
+    canvas.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if (e.touches.length === 1 && isDragging) { rotY += (e.touches[0].clientX - lastMX) * 0.008; rotX += (e.touches[0].clientY - lastMY) * 0.008; lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY }
+      else if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); zoom *= lastTouchDist / d; zoom = Math.max(1, Math.min(20, zoom)); lastTouchDist = d }
+    }, { passive: false });
+    canvas.addEventListener('touchend', () => isDragging = false);
+
+    /* ── keyboard ── */
+    window.addEventListener('keydown', e => {
+      // Ignore when typing in inputs
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      if (e.key === 'i' || e.key === 'I') {
+        e.preventDefault();
+        toggleUI();
+        return;
+      }
+
+      // If UI hidden, flash tooltip on any key
+      if (!uiVisible) {
+        const t = document.getElementById('keyTooltip');
+        resetTooltipText();
+        t.classList.add('visible');
+        clearTimeout(tooltipTimer);
+        tooltipTimer = setTimeout(() => t.classList.remove('visible'), 2000);
+      }
+    });
+
+    /* ── toggleUI (shared by keyboard + button) ── */
+    function toggleUI() {
+      uiVisible = !uiVisible;
+      document.getElementById('header').classList.toggle('hidden', !uiVisible);
+      document.getElementById('settingsPanel').classList.remove('visible');
+      document.getElementById('stats').classList.toggle('visible', uiVisible && hasModel);
+      document.getElementById('toggleUiBtn').classList.toggle('ui-hidden', !uiVisible);
+
+      if (!uiVisible) {
+        const t = document.getElementById('keyTooltip');
+        resetTooltipText();
+        t.classList.add('visible');
+        clearTimeout(tooltipTimer);
+        tooltipTimer = setTimeout(() => t.classList.remove('visible'), 2500);
+      } else {
+        document.getElementById('keyTooltip').classList.remove('visible');
+      }
+    }
+
+    // Show toggle button briefly on mouse/touch when UI hidden
+    let peekTimer = null;
+    function peekToggleBtn() {
+      if (uiVisible) return;
+      const btn = document.getElementById('toggleUiBtn');
+      btn.classList.add('peek');
+      clearTimeout(peekTimer);
+      peekTimer = setTimeout(() => btn.classList.remove('peek'), 2000);
+    }
+    document.addEventListener('mousemove', peekToggleBtn);
+    document.addEventListener('touchstart', peekToggleBtn, { passive: true });
+
+    /* ── controls ── */
+    function toggleSpin() {
+      autoSpin = !autoSpin;
+      document.getElementById('btnSpin').classList.toggle('active', autoSpin);
+    }
+    function toggleWireframe() {
+      wireMode = (wireMode + 1) % 3;
+      const btn = document.getElementById('btnWireframe');
+      const labels = ['◇ Wireframe', '◈ Wireframe', '◆ See-Through'];
+      btn.textContent = labels[wireMode];
+      btn.classList.toggle('active', wireMode > 0);
+    }
+    function toggleSettings() {
+      document.getElementById('settingsPanel').classList.toggle('visible');
+    }
+    function toggleGround() {
+      showGround = !showGround;
+      document.getElementById('groundLine').classList.toggle('visible', showGround);
+      document.getElementById('btnGround').classList.toggle('active', showGround);
+    }
+    function resetView() {
+      rotX = -0.4; rotY = 0; zoom = 3.5;
+    }
+
+    document.getElementById('btnSpin').classList.add('active');
+
+    document.getElementById('colorPicker').addEventListener('input', e => {
+      const h = e.target.value;
+      document.getElementById('colorSwatch').style.background = h;
+      modelColor = [parseInt(h.substr(1, 2), 16) / 255, parseInt(h.substr(3, 2), 16) / 255, parseInt(h.substr(5, 2), 16) / 255];
+    });
+    document.getElementById('speedSlider').addEventListener('input', e => { spinSpeed = e.target.value / 100; });
+
+    // Close settings when clicking outside
+    document.addEventListener('click', e => {
+      const panel = document.getElementById('settingsPanel');
+      const btn = document.getElementById('btnSettings');
+      if (panel.classList.contains('visible') && !panel.contains(e.target) && !btn.contains(e.target)) {
+        panel.classList.remove('visible');
+      }
+    });
+
+    /* ── lighting presets ── */
+    document.getElementById('lightPresets').addEventListener('click', e => {
+      const chip = e.target.closest('[data-light]');
+      if (!chip) return;
+      document.querySelectorAll('#lightPresets .setting-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      currentLight = LIGHT_PRESETS[chip.dataset.light];
+    });
+
+    /* ── background presets ── */
+    document.getElementById('bgPresets').addEventListener('click', e => {
+      const chip = e.target.closest('[data-bg]');
+      if (!chip) return;
+      document.querySelectorAll('#bgPresets .setting-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      currentBg = BG_PRESETS[chip.dataset.bg];
+      customBgColor = null;
+      const bgEl = document.getElementById('viewportBg');
+      if (bgObjectUrl) { URL.revokeObjectURL(bgObjectUrl); bgObjectUrl = null; }
+      if (currentBg.css) {
+        bgEl.style.backgroundImage = currentBg.css;
+        bgEl.style.backgroundColor = currentBg.cssBg || 'transparent';
+        bgEl.style.backgroundSize = '';
+        bgEl.style.backgroundPosition = '';
+        bgEl.classList.add('visible');
+      } else {
+        bgEl.classList.remove('visible');
+        bgEl.style.backgroundImage = '';
+        bgEl.style.backgroundColor = '';
+      }
+    });
+
+    /* ── custom background ── */
+    document.getElementById('bgInput').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (file.size > MAX_BG_SIZE) { showToast('Background image too large (max 5 MB).'); return; }
+      if (!file.type.startsWith('image/')) { showToast('Please select an image file.'); return; }
+
+      if (bgObjectUrl) URL.revokeObjectURL(bgObjectUrl);
+      bgObjectUrl = URL.createObjectURL(file);
+      const bgEl = document.getElementById('viewportBg');
+      bgEl.style.background = '';
+      bgEl.style.backgroundImage = 'url(' + bgObjectUrl + ')';
+      bgEl.style.backgroundSize = 'cover';
+      bgEl.style.backgroundPosition = 'center';
+      bgEl.classList.add('visible');
+
+      // Mark the upload chip active
+      document.querySelectorAll('#bgPresets .setting-chip').forEach(c => c.classList.remove('active'));
+
+      e.target.value = '';
+    });
+
+    /* ── custom background color ── */
+    document.getElementById('bgColorChip').addEventListener('click', e => {
+      e.stopPropagation();
+      document.getElementById('bgColorInput').click();
+    });
+    document.getElementById('bgColorInput').addEventListener('input', e => {
+      const hex = e.target.value;
+      customBgColor = [
+        parseInt(hex.substr(1, 2), 16) / 255,
+        parseInt(hex.substr(3, 2), 16) / 255,
+        parseInt(hex.substr(5, 2), 16) / 255,
+      ];
+      // Clear other bg modes
+      if (bgObjectUrl) { URL.revokeObjectURL(bgObjectUrl); bgObjectUrl = null; }
+      const bgEl = document.getElementById('viewportBg');
+      bgEl.classList.remove('visible');
+      bgEl.style.background = '';
+      bgEl.style.backgroundImage = '';
+      document.querySelectorAll('#bgPresets .setting-chip').forEach(c => c.classList.remove('active'));
+      document.getElementById('bgColorChip').classList.add('active');
+    });
+
+    /* ── render loop ── */
+    const startTime = performance.now();
+
+    function render() {
+      requestAnimationFrame(render);
+      const t = (performance.now() - startTime) * 0.001;
+      if (autoSpin) rotY += 0.008 * spinSpeed;
+
+      const bg = customBgColor || currentBg.clear;
+      const useBgImage = document.getElementById('viewportBg').classList.contains('visible');
+      gl.clearColor(bg[0], bg[1], bg[2], useBgImage ? 0 : 1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.DEPTH_TEST);
+
+      if (!hasModel) return;
+
+      const aspect = canvas.width / canvas.height;
+      const proj = perspective(Math.PI / 4, aspect, 0.1, 100);
+      const eyePos = [0, 0, zoom];
+      const view = lookAt(eyePos, [0, 0, 0], [0, 1, 0]);
+
+      let model = m4Scale(modelScale);
+      model = m4Mul(model, m4Trans(-modelCenter[0], -modelCenter[1], -modelCenter[2]));
+      model = m4Mul(m4RotX(rotX), model);
+      model = m4Mul(m4RotY(rotY), model);
+
+      const normalMat = m3Normal(model);
+
+      function setup(prog) {
+        gl.useProgram(prog);
+        const aP = gl.getAttribLocation(prog, 'aPos'), aN = gl.getAttribLocation(prog, 'aNorm');
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer); gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer); gl.enableVertexAttribArray(aN); gl.vertexAttribPointer(aN, 3, gl.FLOAT, false, 0, 0);
+        gl.uniformMatrix4fv(gl.getUniformLocation(prog, 'uProj'), false, proj);
+        gl.uniformMatrix4fv(gl.getUniformLocation(prog, 'uView'), false, view);
+        gl.uniformMatrix4fv(gl.getUniformLocation(prog, 'uModel'), false, model);
+        gl.uniformMatrix3fv(gl.getUniformLocation(prog, 'uNormalMat'), false, normalMat);
+        gl.uniform3fv(gl.getUniformLocation(prog, 'uColor'), modelColor);
+        gl.uniform3fv(gl.getUniformLocation(prog, 'uEye'), eyePos);
+        const tL = gl.getUniformLocation(prog, 'uTime'); if (tL) gl.uniform1f(tL, t);
+        // Lighting uniforms
+        const lt = currentLight;
+        const loc = n => gl.getUniformLocation(prog, n);
+        if (loc('uL1Dir')) gl.uniform3fv(loc('uL1Dir'), lt.l1);
+        if (loc('uL1Col')) gl.uniform3fv(loc('uL1Col'), lt.l1c);
+        if (loc('uL2Dir')) gl.uniform3fv(loc('uL2Dir'), lt.l2);
+        if (loc('uL2Col')) gl.uniform3fv(loc('uL2Col'), lt.l2c);
+        if (loc('uAmb')) gl.uniform1f(loc('uAmb'), lt.amb);
+        if (loc('uRimCol')) gl.uniform3fv(loc('uRimCol'), lt.rim);
+      }
+
+      if (wireMode === 2) {
+        gl.disable(gl.DEPTH_TEST);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        setup(wireframeProgram);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wireIndexBuffer);
+        gl.drawElements(gl.LINES, wireIndexCount, gl.UNSIGNED_INT, 0);
+        gl.disable(gl.BLEND);
+        gl.enable(gl.DEPTH_TEST);
+      } else if (wireMode === 1) {
+        gl.enable(gl.POLYGON_OFFSET_FILL);
+        gl.polygonOffset(1.0, 1.0);
+        setup(program);
+        gl.uniform3fv(gl.getUniformLocation(program, 'uColor'), modelColor.map(c => c * 0.3));
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.drawElements(gl.TRIANGLES, indexCount, gl.UNSIGNED_INT, 0);
+        gl.disable(gl.POLYGON_OFFSET_FILL);
+        setup(wireframeProgram);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, wireIndexBuffer);
+        gl.drawElements(gl.LINES, wireIndexCount, gl.UNSIGNED_INT, 0);
+      } else {
+        setup(program);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.drawElements(gl.TRIANGLES, indexCount, gl.UNSIGNED_INT, 0);
+      }
+    }
+
+    render();
+
+    // Show initial tooltip so users know about the 'I' shortcut
+    setTimeout(() => {
+      const t = document.getElementById('keyTooltip');
+      resetTooltipText();
+      t.classList.add('visible');
+      clearTimeout(tooltipTimer);
+      tooltipTimer = setTimeout(() => t.classList.remove('visible'), 4000);
+    }, 1000);
+  </script>
+</body>
+
+</html>
