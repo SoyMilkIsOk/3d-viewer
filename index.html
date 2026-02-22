@@ -15,14 +15,14 @@
     content="The simplest and most beautiful free 3D model viewer on the web. Upload STL, OBJ, or PLY files and view them in stunning 3D — right in your browser, no sign-up required.">
   <meta name="keywords"
     content="3D viewer, STL viewer, OBJ viewer, PLY viewer, free 3D model viewer, browser 3D, WebGL viewer">
-  <link rel="canonical" href="https://yourdomain.com/">
+  <link rel="canonical" href="https://3d.terpscoops.com/">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="3D Viewer — The Simplest & Most Beautiful Free 3D Viewer">
   <meta property="og:description"
     content="Upload any 3D model and view it beautifully in your browser. STL, OBJ, PLY supported. No sign-up, no downloads, totally free.">
-  <meta property="og:url" content="https://yourdomain.com/">
+  <meta property="og:url" content="https://3d.terpscoops.com/">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
@@ -881,6 +881,7 @@
     let autoSpin = true, wireMode = 0; // 0=solid, 1=wireframe, 2=see-through
     let rotX = -0.4, rotY = 0;
     let zoom = 3.5;
+    let panX = 0, panY = 0;
     let isDragging = false, lastMX = 0, lastMY = 0;
     let modelColor = [0.424, 0.388, 1.0];
     let spinSpeed = 0.5;
@@ -1190,25 +1191,58 @@
     viewportEl.addEventListener('drop', e => { if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
 
     /* ── mouse / touch ── */
-    canvas.addEventListener('mousedown', e => { isDragging = true; lastMX = e.clientX; lastMY = e.clientY; });
-    window.addEventListener('mouseup', () => isDragging = false);
+    let isPanning = false;
+    canvas.addEventListener('mousedown', e => {
+      if (e.button === 1 || e.button === 2) {
+        isPanning = true; lastMX = e.clientX; lastMY = e.clientY; e.preventDefault();
+      } else {
+        isDragging = true; lastMX = e.clientX; lastMY = e.clientY;
+      }
+    });
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+    window.addEventListener('mouseup', () => { isDragging = false; isPanning = false; });
     window.addEventListener('mousemove', e => {
-      if (!isDragging) return;
-      rotY += (e.clientX - lastMX) * 0.008; rotX += (e.clientY - lastMY) * 0.008;
-
-      lastMX = e.clientX; lastMY = e.clientY;
+      if (isPanning) {
+        panX -= (e.clientX - lastMX) * 0.003 * zoom;
+        panY += (e.clientY - lastMY) * 0.003 * zoom;
+        lastMX = e.clientX; lastMY = e.clientY;
+      } else if (isDragging) {
+        rotY += (e.clientX - lastMX) * 0.008; rotX += (e.clientY - lastMY) * 0.008;
+        lastMX = e.clientX; lastMY = e.clientY;
+      }
     });
     canvas.addEventListener('wheel', e => { e.preventDefault(); zoom *= 1 + e.deltaY * 0.001; zoom = Math.max(1, Math.min(20, zoom)); }, { passive: false });
 
-    let lastTouchDist = 0;
+    let lastTouchDist = 0, lastTouchCX = 0, lastTouchCY = 0;
     canvas.addEventListener('touchstart', e => {
-      if (e.touches.length === 1) { isDragging = true; lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY }
-      else if (e.touches.length === 2) lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      if (e.touches.length === 1) {
+        isDragging = true; lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY;
+      } else if (e.touches.length === 2) {
+        isDragging = false;
+        lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        lastTouchCX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        lastTouchCY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      }
     }, { passive: true });
     canvas.addEventListener('touchmove', e => {
       e.preventDefault();
-      if (e.touches.length === 1 && isDragging) { rotY += (e.touches[0].clientX - lastMX) * 0.008; rotX += (e.touches[0].clientY - lastMY) * 0.008; lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY }
-      else if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); zoom *= lastTouchDist / d; zoom = Math.max(1, Math.min(20, zoom)); lastTouchDist = d }
+      if (e.touches.length === 1 && isDragging) {
+        rotY += (e.touches[0].clientX - lastMX) * 0.008;
+        rotX += (e.touches[0].clientY - lastMY) * 0.008;
+        lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY;
+      } else if (e.touches.length === 2) {
+        // Pinch zoom
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        zoom *= lastTouchDist / d;
+        zoom = Math.max(1, Math.min(20, zoom));
+        lastTouchDist = d;
+        // Two-finger pan
+        const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        panX -= (cx - lastTouchCX) * 0.003 * zoom;
+        panY += (cy - lastTouchCY) * 0.003 * zoom;
+        lastTouchCX = cx; lastTouchCY = cy;
+      }
     }, { passive: false });
     canvas.addEventListener('touchend', () => isDragging = false);
 
@@ -1250,6 +1284,8 @@
       } else {
         document.getElementById('keyTooltip').classList.remove('visible');
       }
+      // Resize canvas after header transition to prevent distortion
+      setTimeout(resize, 350);
     }
 
     // Show toggle button briefly on mouse/touch when UI hidden
@@ -1285,7 +1321,7 @@
       document.getElementById('btnGround').classList.toggle('active', showGround);
     }
     function resetView() {
-      rotX = -0.4; rotY = 0; zoom = 3.5;
+      rotX = -0.4; rotY = 0; zoom = 3.5; panX = 0; panY = 0;
     }
 
     document.getElementById('btnSpin').classList.add('active');
@@ -1457,8 +1493,8 @@
       const hdr = document.getElementById('header');
       const headerPx = (!hdr.classList.contains('hidden')) ? hdr.offsetHeight : 0;
       const camYOffset = -(headerPx / window.innerHeight) * 0.8;
-      const eyePos = [0, camYOffset, zoom];
-      const view = lookAt(eyePos, [0, camYOffset, 0], [0, 1, 0]);
+      const eyePos = [panX, camYOffset + panY, zoom];
+      const view = lookAt(eyePos, [panX, camYOffset + panY, 0], [0, 1, 0]);
 
       let model = m4Scale(modelScale);
       model = m4Mul(model, m4Trans(-modelCenter[0], -modelCenter[1], -modelCenter[2]));
