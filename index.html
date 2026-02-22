@@ -155,8 +155,7 @@
     }
 
     #fileInput,
-    #bgInput,
-    #bgColorInput {
+    #bgInput {
       display: none
     }
 
@@ -604,6 +603,52 @@
       cursor: pointer;
     }
 
+    /* ── grid options row ── */
+    .grid-options {
+      display: none;
+      width: 100%;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 0 2px;
+    }
+
+    .grid-options.visible {
+      display: flex;
+    }
+
+    .grid-options label {
+      font-size: .65rem;
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+
+    .grid-color-pick {
+      position: relative;
+      display: inline-block;
+    }
+
+    .grid-color-swatch {
+      width: 22px;
+      height: 22px;
+      border-radius: 5px;
+      border: 1.5px solid var(--border);
+      cursor: pointer;
+      transition: border-color .2s;
+    }
+
+    .grid-color-swatch:hover {
+      border-color: var(--accent);
+    }
+
+    .grid-color-pick input[type=color] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+
     /* ── mobile responsiveness ── */
     @media (max-width: 640px) {
       header {
@@ -790,6 +835,18 @@
               <button class="setting-chip upload-chip" id="bgColorChip">🎨 Color</button>
               <input type="color" id="bgColorInput" value="#1a1a2e">
             </div>
+            <div class="grid-options" id="gridOptions">
+              <label>Lines</label>
+              <div class="grid-color-pick">
+                <div class="grid-color-swatch" id="gridFgSwatch" style="background:rgba(108,99,255,.25)"></div>
+                <input type="color" id="gridFgColor" value="#6c63ff">
+              </div>
+              <label>Background</label>
+              <div class="grid-color-pick">
+                <div class="grid-color-swatch" id="gridBgSwatch" style="background:#0d0d14"></div>
+                <input type="color" id="gridBgColor" value="#0d0d14">
+              </div>
+            </div>
           </div>
           <input type="file" id="bgInput" accept="image/*">
         </div>
@@ -835,6 +892,9 @@
     let showGround = false;
     let tooltipTimer = null;
     let customBgColor = null; // for custom bg color mode
+    let gridLineColor = '#6c63ff';
+    let gridLineAlpha = 0.25;
+    let gridBgColorHex = '#0d0d14';
 
     // Lighting presets: { key1Dir, key1Color, fill1Dir, fill1Color, ambient, rimColor }
     const LIGHT_PRESETS = {
@@ -1256,16 +1316,59 @@
     });
 
     /* ── background presets ── */
+    let currentBgKey = 'void';
+
+    function buildGridCSS() {
+      const r = parseInt(gridLineColor.substr(1, 2), 16);
+      const g = parseInt(gridLineColor.substr(3, 2), 16);
+      const b = parseInt(gridLineColor.substr(5, 2), 16);
+      const line = 'rgba(' + r + ',' + g + ',' + b + ',' + gridLineAlpha + ')';
+      return 'repeating-linear-gradient(0deg,transparent,transparent 39px,' + line + ' 39px,' + line + ' 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,' + line + ' 39px,' + line + ' 40px)';
+    }
+
+    function applyGrid() {
+      const bgEl = document.getElementById('viewportBg');
+      bgEl.style.backgroundImage = buildGridCSS();
+      bgEl.style.backgroundColor = gridBgColorHex;
+      bgEl.style.backgroundSize = '';
+      bgEl.style.backgroundPosition = '';
+      bgEl.classList.add('visible');
+      // Update clear color to match
+      const br = parseInt(gridBgColorHex.substr(1, 2), 16) / 255;
+      const bg = parseInt(gridBgColorHex.substr(3, 2), 16) / 255;
+      const bb = parseInt(gridBgColorHex.substr(5, 2), 16) / 255;
+      BG_PRESETS.grid.clear = [br, bg, bb];
+    }
+
     document.getElementById('bgPresets').addEventListener('click', e => {
       const chip = e.target.closest('[data-bg]');
       if (!chip) return;
+      const key = chip.dataset.bg;
+
+      // If clicking Grid when already active, toggle grid options
+      if (key === 'grid' && currentBgKey === 'grid') {
+        document.getElementById('gridOptions').classList.toggle('visible');
+        return;
+      }
+
+      // Hide grid options when switching away
+      if (key !== 'grid') {
+        document.getElementById('gridOptions').classList.remove('visible');
+      }
+
       document.querySelectorAll('#bgPresets .setting-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
-      currentBg = BG_PRESETS[chip.dataset.bg];
+      currentBgKey = key;
+      currentBg = BG_PRESETS[key];
       customBgColor = null;
       const bgEl = document.getElementById('viewportBg');
       if (bgObjectUrl) { URL.revokeObjectURL(bgObjectUrl); bgObjectUrl = null; }
-      if (currentBg.css) {
+
+      if (key === 'grid') {
+        applyGrid();
+        // Show grid options on first select
+        document.getElementById('gridOptions').classList.add('visible');
+      } else if (currentBg.css) {
         bgEl.style.backgroundImage = currentBg.css;
         bgEl.style.backgroundColor = currentBg.cssBg || 'transparent';
         bgEl.style.backgroundSize = '';
@@ -1294,17 +1397,14 @@
       bgEl.style.backgroundPosition = 'center';
       bgEl.classList.add('visible');
 
-      // Mark the upload chip active
       document.querySelectorAll('#bgPresets .setting-chip').forEach(c => c.classList.remove('active'));
+      document.getElementById('gridOptions').classList.remove('visible');
+      currentBgKey = 'image';
 
       e.target.value = '';
     });
 
     /* ── custom background color ── */
-    document.getElementById('bgColorChip').addEventListener('click', e => {
-      e.stopPropagation();
-      document.getElementById('bgColorInput').click();
-    });
     document.getElementById('bgColorInput').addEventListener('input', e => {
       const hex = e.target.value;
       customBgColor = [
@@ -1312,7 +1412,6 @@
         parseInt(hex.substr(3, 2), 16) / 255,
         parseInt(hex.substr(5, 2), 16) / 255,
       ];
-      // Clear other bg modes
       if (bgObjectUrl) { URL.revokeObjectURL(bgObjectUrl); bgObjectUrl = null; }
       const bgEl = document.getElementById('viewportBg');
       bgEl.classList.remove('visible');
@@ -1320,6 +1419,20 @@
       bgEl.style.backgroundImage = '';
       document.querySelectorAll('#bgPresets .setting-chip').forEach(c => c.classList.remove('active'));
       document.getElementById('bgColorChip').classList.add('active');
+      document.getElementById('gridOptions').classList.remove('visible');
+      currentBgKey = 'color';
+    });
+
+    /* ── grid color pickers ── */
+    document.getElementById('gridFgColor').addEventListener('input', e => {
+      gridLineColor = e.target.value;
+      document.getElementById('gridFgSwatch').style.background = gridLineColor;
+      if (currentBgKey === 'grid') applyGrid();
+    });
+    document.getElementById('gridBgColor').addEventListener('input', e => {
+      gridBgColorHex = e.target.value;
+      document.getElementById('gridBgSwatch').style.background = gridBgColorHex;
+      if (currentBgKey === 'grid') applyGrid();
     });
 
     /* ── render loop ── */
