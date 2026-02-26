@@ -1500,8 +1500,8 @@
 
       let model = m4Scale(modelScale);
       model = m4Mul(model, m4Trans(-modelCenter[0], -modelCenter[1], -modelCenter[2]));
-      model = m4Mul(m4RotX(rotX), model);
       model = m4Mul(m4RotY(rotY), model);
+      model = m4Mul(m4RotX(rotX), model);
 
       const normalMat = m3Normal(model);
 
