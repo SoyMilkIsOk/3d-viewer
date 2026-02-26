@@ -792,6 +792,8 @@
         </div>
         <h2>Drop a 3D model here</h2>
         <p>Supports STL · OBJ · PLY</p>
+        <button class="btn outline" style="margin-top: 24px; padding: 10px 24px; font-size: 0.85rem;"
+          onclick="loadDemoModel()">Load Demo</button>
       </div>
 
       <div class="stats" id="stats">
@@ -1554,6 +1556,24 @@
     }
 
     render();
+
+    function loadDemoModel() {
+      document.getElementById('loader').classList.add('visible');
+      fetch('Teapot.obj')
+        .then(res => {
+          if (!res.ok) throw new Error('Network response was not ok');
+          return res.text();
+        })
+        .then(text => {
+          document.getElementById('fileName').textContent = 'Teapot.obj';
+          loadModel(parseOBJ(text));
+        })
+        .catch(err => {
+          console.error('Demo model not loaded:', err);
+          document.getElementById('loader').classList.remove('visible');
+          showToast('Failed to load. View via local server to use Demo.');
+        });
+    }
 
     // Show initial tooltip so users know about the 'I' shortcut
     setTimeout(() => {
