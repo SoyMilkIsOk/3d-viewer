@@ -760,7 +760,7 @@
         <input type="file" id="fileInput" accept=".stl,.obj,.ply">
 
         <button class="btn outline" id="btnSpin" onclick="toggleSpin()">⟳ Auto-Spin</button>
-        <button class="btn outline" id="btnWireframe" onclick="toggleWireframe()">◇ Wireframe</button>
+        <button class="btn outline active" id="btnWireframe" onclick="toggleWireframe()">◇ See-Through</button>
 
         <div class="slider-wrap">
           <label>Speed</label>
@@ -880,7 +880,7 @@
     let gl, program, wireframeProgram;
     let vertexBuffer, normalBuffer, indexBuffer, wireIndexBuffer;
     let indexCount = 0, vertCount = 0, faceCount = 0;
-    let autoSpin = true, wireMode = 0; // 0=solid, 1=wireframe, 2=see-through
+    let autoSpin = true, wireMode = 2; // 2=see-through, 1=wireframe, 0=solid
     let rotX = -0.4, rotY = 0;
     let zoom = 3.5;
     let panX = 0, panY = 0;
@@ -1312,9 +1312,10 @@
       document.getElementById('btnSpin').classList.toggle('active', autoSpin);
     }
     function toggleWireframe() {
-      wireMode = (wireMode + 1) % 3;
+      // 2=see-through, 1=wireframe, 0=solid
+      wireMode = (wireMode - 1 + 3) % 3;
       const btn = document.getElementById('btnWireframe');
-      const labels = ['◇ Wireframe', '◈ Wireframe', '◆ See-Through'];
+      const labels = ['◆ Solid', '◈ Wireframe', '◇ See-Through'];
       btn.textContent = labels[wireMode];
       btn.classList.toggle('active', wireMode > 0);
     }
@@ -1563,14 +1564,23 @@
 
     function loadDemoModel() {
       document.getElementById('loader').classList.add('visible');
-      fetch('Teapot.obj')
+      fetch('nug.stl')
         .then(res => {
           if (!res.ok) throw new Error('Network response was not ok');
-          return res.text();
+          return res.arrayBuffer();
         })
-        .then(text => {
-          document.getElementById('fileName').textContent = 'Teapot.obj';
-          loadModel(parseOBJ(text));
+        .then(buf => {
+          let ascii = false;
+          try {
+            const h = new TextDecoder().decode(new Uint8Array(buf, 0, 80));
+            if (h.startsWith('solid') && !h.includes('\0')) {
+              const t = new TextDecoder().decode(buf);
+              if (t.includes('facet') && t.includes('vertex')) ascii = true;
+            }
+          } catch (x) { }
+
+          document.getElementById('fileName').textContent = 'nug.stl';
+          loadModel(ascii ? parseSTLAscii(new TextDecoder().decode(buf)) : parseSTLBinary(buf));
         })
         .catch(err => {
           console.error('Demo model not loaded:', err);
